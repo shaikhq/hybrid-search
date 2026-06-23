@@ -142,16 +142,15 @@ and vector dimension. See [.env.example](.env.example) and each script's
 ```
 scripts/   cleanup.sh · ingest.py · search.py  (+ setup_text_search.sh prereq)
 docs/      Db2 and OpenSearch setup notes, images
-examples/  in-memory RRF demo, a notebook walk-through, a PDF→Markdown helper
-backup/    superseded/auxiliary files kept for reference (not needed to run)
+examples/  optional in-memory RRF demo (no Db2)
 ```
 
 ## Docs & examples
 
 - [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.
 - [docs/opensearch-setup.md](docs/opensearch-setup.md) — install OpenSearch and wire it to Db2 Text Search.
-- [examples/](examples/) — a standalone in-memory hybrid-search demo (BM25 + dense + RRF,
-  no Db2) and a notebook that walks through the lexical-ingestion path step by step.
+- [examples/](examples/) — an optional standalone in-memory hybrid-search demo
+  (BM25 + dense + RRF, no Db2) for understanding the fusion idea.
 
 ## License
 
