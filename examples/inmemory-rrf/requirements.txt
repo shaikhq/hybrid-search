@@ -1,0 +1,14 @@
+# Pinned for reproducibility. Verified against the live PyPI APIs (June 2026).
+#
+# NOTE on torch: sentence-transformers needs PyTorch. The default PyPI torch
+# wheel pulls in large CUDA packages. For this CPU-only learning demo install
+# the CPU build first (see README), then `pip install -r requirements.txt`.
+torch==2.12.1                 # CPU build; see README for the --index-url line
+                              # (bumped from 2.8.0: Docling needs torch>=2.12 and
+                              #  the chunking script shares this venv — see
+                              #  requirements-chunk.txt)
+numpy==2.2.6
+requests==2.32.3
+beautifulsoup4==4.12.3
+rank-bm25==0.2.2              # BM25Okapi
+sentence-transformers==5.5.1 # SentenceTransformer("all-MiniLM-L6-v2")

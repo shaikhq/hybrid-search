@@ -1,0 +1,21 @@
+# Extra dependencies for the PDF -> Markdown -> chunk -> Db2 workflow
+# (pdf_to_markdown.py  +  chunk_and_ingest.ipynb).
+#
+# Install on top of requirements.txt, into the SAME venv:
+#
+#   # CPU-only torch/torchvision first (avoids large CUDA wheels):
+#   pip install --index-url https://download.pytorch.org/whl/cpu \
+#       torch==2.12.1 torchvision==0.27.1
+#   pip install -r requirements.txt -r requirements-chunk.txt
+#
+# SYSTEM REQUIREMENT:
+#   Docling's models import OpenCV (opencv-python), which needs libGL.so.1.
+#   On RHEL/Fedora:   sudo dnf install -y libglvnd-glx
+#   On Debian/Ubuntu: sudo apt-get install -y libgl1
+#
+# Note: pin torchvision here so the CPU build is reproducible (Docling pulls it).
+
+docling==2.105.0
+torchvision==0.27.1                  # CPU build; install via the --index-url above
+ibm_db==3.2.9                        # Db2 driver (TCP connection)
+opencv-python==4.13.0.92             # Docling dependency (needs libGL.so.1; see above)
