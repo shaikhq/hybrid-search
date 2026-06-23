@@ -14,6 +14,9 @@ Python here. For each demo query, against the corpus built by
 Seeing them side by side is the point: keyword search nails exact terms, vector
 search catches paraphrases, and the fusion gets both.
 
+This is a teaching demo with preset queries. To search interactively with your
+own query, use the pipeline's tool instead: ../scripts/search.py.
+
 Prerequisite: run ../scripts/ingest.py first (creates myschema.chunks with a
 text index and a vector column).
 

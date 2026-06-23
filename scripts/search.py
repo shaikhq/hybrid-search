@@ -2,6 +2,10 @@
 """
 search.py — hybrid search over the corpus built by ingest.py.
 
+This is the pipeline's query tool (cleanup -> ingest -> search): give it one
+query, get one fused result list. For a side-by-side lexical vs vector vs hybrid
+teaching demo over preset queries, see examples/hybrid_search.py.
+
 One Db2 SQL query does everything:
   • Lexical — Db2 Text Search keyword match (CONTAINS, ranked by SCORE).
   • Vector  — semantic match on watsonx embeddings (VECTOR_DISTANCE, cosine).
