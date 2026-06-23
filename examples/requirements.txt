@@ -1,4 +1,0 @@
-# The demo runs all search in Db2, so it needs only the Db2 driver.
-# (If you've already installed the project's root requirements.txt, this is
-#  already satisfied.)
-ibm_db==3.2.9

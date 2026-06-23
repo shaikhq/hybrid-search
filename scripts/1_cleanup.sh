@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# cleanup.sh — start from a clean slate.
+# 1_cleanup.sh — start from a clean slate.
 #
 # Drops the text-search index and then the chunks table. Run this BEFORE
-# ingest.py. Safe to run anytime: missing objects are ignored.
+# 5_ingest.py. Safe to run anytime: missing objects are ignored.
 #
 # The index is dropped first, because a table can't be dropped while a
 # text-search index sits on it.
 #
-# Run as the Db2 instance owner:  ./cleanup.sh
+# Run as the Db2 instance owner:  ./1_cleanup.sh
 
 set -uo pipefail
 

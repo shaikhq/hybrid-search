@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# setup_text_search.sh — one-time setup (run once).
+# 2_setup.sh — one-time setup (run once).
 #
 # Prepares Db2 for keyword search:
 #   1. enables Db2 Text Search on the database, and
 #   2. registers OpenSearch as the search backend the keyword index will use.
 #
-# Run as the Db2 instance owner:  ./setup_text_search.sh
+# Run as the Db2 instance owner:  ./2_setup.sh
 
 set -uo pipefail
 

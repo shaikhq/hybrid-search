@@ -33,7 +33,7 @@ PDF ──Docling──▶ Markdown ──HybridChunker──▶ chunks
                                 └── embedding  → native VECTOR column (watsonx.ai)      → cosine · VECTOR_DISTANCE
                                                │
                                                ▼
-                       search.py: run both legs, fuse with Reciprocal Rank Fusion (RRF)
+            6_search.py: run both legs, fuse with RRF — all in one Db2 SQL query
 ```
 
 Each chunk is **one row** holding its text, a stable `chunk_id`, a text-search
@@ -80,77 +80,98 @@ $EDITOR .env          # Db2 connection + watsonx.ai API key / project id
 
 `.env` is git-ignored — your real credentials are never committed.
 
-**One-time:** register OpenSearch with Db2 Text Search (creates the backend the
-lexical index uses):
+## Usage — run the scripts in order
+
+The filenames are numbered by execution order — run them **1 → 6** as the Db2
+instance owner, from the repo root. The ingestion is split into small steps
+(extract → chunk → load) so you can open and inspect each intermediate file:
+the `.md` and the `.chunks.csv`.
+
+### 1. `1_cleanup.sh` — clean slate
 
 ```bash
-./scripts/setup_text_search.sh
-```
-
-## Usage — run the three scripts in order
-
-The pipeline is three steps; **order matters**.
-
-### 1. `cleanup` — start from a clean slate
-
-```bash
-./scripts/cleanup.sh
+./scripts/1_cleanup.sh
 ```
 
 Drops the text-search index, then the chunks table (in that dependency order).
 Idempotent — safe to run even if nothing exists yet.
 **Leaves behind:** an empty schema, ready for a fresh ingest.
 
-### 2. `ingest` — PDF → searchable corpus
+### 2. `2_setup.sh` — one-time setup
 
 ```bash
-python scripts/ingest.py --pdf path/to/your-document.pdf
+./scripts/2_setup.sh
 ```
 
-Runs end to end: extract the PDF to Markdown (Docling) → chunk it
-(HybridChunker, capped to the embedding model's token limit) → create the table
-and load the chunks → build the Db2 Text Search lexical index → register the
-watsonx.ai embedding model → add a `VECTOR` column and populate it with
+Enables Db2 Text Search and registers OpenSearch as the lexical backend.
+Only needs to succeed once per database; safe to re-run.
+
+### 3. `3_extract.py` — PDF → Markdown
+
+```bash
+python scripts/3_extract.py path/to/your-document.pdf
+```
+
+Docling parses the PDF and writes clean Markdown next to it (`your-document.md`).
+**Leaves behind:** a Markdown file you can open and read.
+
+### 4. `4_chunk.py` — Markdown → chunks (CSV)
+
+```bash
+python scripts/4_chunk.py path/to/your-document.md
+```
+
+Splits the Markdown with Docling's HybridChunker (capped to the embedding
+model's token limit) and writes a two-column CSV (`chunk_id, chunk_text`).
+**Leaves behind:** `your-document.chunks.csv` — open it to see exactly what gets indexed.
+
+### 5. `5_ingest.py` — chunks (CSV) → Db2
+
+```bash
+python scripts/5_ingest.py path/to/your-document.chunks.csv
+```
+
+Loads the chunks into a Db2 table, builds the Db2 Text Search lexical index,
+registers the watsonx.ai embedding model, and fills a `VECTOR` column with
 in-database embeddings.
 **Leaves behind:** one table (default `myschema.chunks`) where every row has
 `chunk_id`, `chunk_text`, a text-search index entry, and an `embedding` vector.
 
-> Lexical-only (skip watsonx): add `--skip-embedding`. Run `python scripts/ingest.py --help`
-> for all options (schema/table names, token cap, vector dimension, etc.).
+> Lexical-only (no watsonx): set `SKIP_EMBEDDING=1` in `.env` to stop after the
+> text index.
 
-### 3. `search` — hybrid retrieval
+### 6. `6_search.py` — hybrid retrieval
 
 ```bash
-python scripts/search.py "how do I turn text into vectors"
+python scripts/6_search.py                  # preset demo queries
+python scripts/6_search.py "how do I turn text into vectors"   # your own query
 ```
 
-Runs the **lexical** leg (`CONTAINS` + `SCORE`) and the **vector** leg
-(`VECTOR_DISTANCE` over a freshly embedded query), then fuses them with
-**Reciprocal Rank Fusion**. Prints each leg's top hits and the fused ranking,
-showing which legs found each chunk.
+For each query it runs the **lexical** leg (`CONTAINS` + `SCORE`) and the
+**vector** leg (`VECTOR_DISTANCE` over a freshly embedded query), and fuses
+them with **Reciprocal Rank Fusion — computed in one Db2 SQL query**. It prints
+the three rankings side by side, so you can see lexical nail exact terms, vector
+catch paraphrases, and the fusion get both. With no argument it runs a couple of
+preset queries; with an argument it searches that query.
 **Leaves behind:** nothing — it's read-only.
 
 ## Configuration
 
-Everything is configurable via `.env` or CLI flags (CLI overrides `.env`):
-Db2 connection, watsonx.ai credentials, schema/table names, chunk token cap,
-and vector dimension. See [.env.example](.env.example) and each script's
-`--help`.
+Everything is configured via `.env`: Db2 connection, watsonx.ai credentials,
+schema/table names, chunk token cap, and vector dimension. See
+[.env.example](.env.example).
 
 ## Repository layout
 
 ```
-scripts/   cleanup.sh · ingest.py · search.py  (+ setup_text_search.sh prereq)
+scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py
 docs/      Db2 and OpenSearch setup notes, images
-examples/  optional in-memory RRF demo (no Db2)
 ```
 
-## Docs & examples
+## Docs
 
 - [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.
 - [docs/opensearch-setup.md](docs/opensearch-setup.md) — install OpenSearch and wire it to Db2 Text Search.
-- [examples/](examples/) — an optional standalone in-memory hybrid-search demo
-  (BM25 + dense + RRF, no Db2) for understanding the fusion idea.
 
 ## License
 

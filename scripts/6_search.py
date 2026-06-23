@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-hybrid_search.py — a small, representative hybrid-search demo on IBM Db2.
+6_search.py — hybrid search over the corpus built by 5_ingest.py.
 
 All the search work happens IN Db2 — there is no BM25 or embedding math in
-Python here. For each demo query, against the corpus built by
-../scripts/ingest.py, the script runs three rankings and shows them together:
+Python here. For each query it runs three rankings and shows them together:
 
   • Lexical  — Db2 Text Search (OpenSearch-backed): CONTAINS + SCORE (keywords).
   • Vector   — Db2 native vectors: VECTOR_DISTANCE + in-database TO_EMBEDDING.
@@ -14,17 +13,17 @@ Python here. For each demo query, against the corpus built by
 Seeing them side by side is the point: keyword search nails exact terms, vector
 search catches paraphrases, and the fusion gets both.
 
-This is a teaching demo with preset queries. To search interactively with your
-own query, use the pipeline's tool instead: ../scripts/search.py.
+Prerequisite: run 5_ingest.py first (creates myschema.chunks with a text index
+and a vector column).
 
-Prerequisite: run ../scripts/ingest.py first (creates myschema.chunks with a
-text index and a vector column).
-
-Usage:  python hybrid_search.py
-Config: read from ../.env (same Db2 + watsonx settings as the pipeline).
+Usage:
+    python scripts/6_search.py                 # preset demo queries
+    python scripts/6_search.py "your question" # search your own query
+Config: read from .env at the repo root (same Db2 + watsonx settings as the pipeline).
 """
 
 import os
+import sys
 import time
 
 import ibm_db
@@ -130,19 +129,25 @@ def snippet(conn, chunk_id):
 
 
 def main():
+    # No argument -> run the preset demo queries. One argument -> search it.
+    queries = [sys.argv[1]] if len(sys.argv) > 1 else DEMO_QUERIES
     conn = connect()
-    for query in DEMO_QUERIES:
+    for query in queries:
+        # We run each leg on its own only so we can show the three rankings side
+        # by side. The hybrid query already fuses lexical + vector with RRF in SQL.
         lexical = ids(conn, LEXICAL_SQL, query, 2)
         vector  = ids(conn, VECTOR_SQL,  query, 1)
         hybrid  = ids(conn, HYBRID_SQL,  query, 3)
+
         print("\n" + "=" * 70)
         print(f'QUERY: "{query}"')
         print("-" * 70)
-        print(f"  Lexical (keyword) : {lexical or '(no keyword matches)'}")
-        print(f"  Vector  (semantic): {vector}")
-        print(f"  Hybrid  (RRF/SQL) : {hybrid}")
-        if hybrid:
-            print(f"  Top hybrid chunk {hybrid[0]}: {snippet(conn, hybrid[0])}")
+        print(f"  Lexical (keyword)  : {lexical or '(no keyword matches)'}")
+        print(f"  Vector  (semantic) : {vector}")
+        print(f"  Hybrid  (RRF in SQL): {hybrid}")
+        print("\n  Hybrid results:")
+        for cid in hybrid:
+            print(f"    #{cid}: {snippet(conn, cid)}")
     ibm_db.close(conn)
 
 
