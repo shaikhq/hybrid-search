@@ -29,14 +29,19 @@ import time
 import ibm_db
 
 # --- Read settings from .env (repo root) -------------------------------------
+# Best-effort: if .env is missing or unreadable (e.g. running as the instance
+# owner in local mode), just fall back to defaults / real env vars.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for env_file in (os.path.join(ROOT, ".env"), ".env"):
-    if os.path.exists(env_file):
-        for line in open(env_file):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, _, v = line.partition("=")
-                os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
+    try:
+        if os.path.exists(env_file):
+            for line in open(env_file):
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, _, v = line.partition("=")
+                    os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
+    except OSError:
+        pass
 
 def setting(name, default=None):
     return os.environ.get(name, default)
@@ -96,23 +101,32 @@ HYBRID_SQL = f"""
 
 
 def connect():
-    """Connect to Db2, retrying a few times to ride out transient stalls."""
+    """Connect to Db2.
+
+    LOCAL mode (DB2_HOST empty or 'local'): a fast local connection — run this
+    as the Db2 instance owner; no host/port/password needed. Use this to avoid
+    the slow ibm_db TCP connect.
+
+    Otherwise: a TCP connection using the .env credentials (with a short retry).
+    """
+    if not HOST or HOST.lower() == "local":
+        return ibm_db.connect(DATABASE, "", "")
     dsn = (f"DATABASE={DATABASE};HOSTNAME={HOST};PORT={PORT};"
            f"PROTOCOL=TCPIP;UID={USER};PWD={PASSWORD};ConnectTimeout=10;")
-    for attempt in range(5):
+    for attempt in range(2):
         try:
             return ibm_db.connect(dsn, "", "")
         except Exception:
-            if attempt == 4:
+            if attempt == 1:
                 raise
             time.sleep(2)
 
 
-def ids(conn, sql, query, n_params):
-    """Run a query (binding `query` n_params times) and return the chunk ids."""
+def ids(conn, sql, params):
+    """Run a query, binding `params` in order; return the chunk ids."""
     stmt = ibm_db.prepare(conn, sql)
-    for i in range(1, n_params + 1):
-        ibm_db.bind_param(stmt, i, query)
+    for i, value in enumerate(params, start=1):
+        ibm_db.bind_param(stmt, i, value)
     ibm_db.execute(stmt)
     out, row = [], ibm_db.fetch_assoc(stmt)
     while row:
@@ -133,11 +147,18 @@ def main():
     queries = [sys.argv[1]] if len(sys.argv) > 1 else DEMO_QUERIES
     conn = connect()
     for query in queries:
+        # Db2 Text Search CONTAINS requires ALL words to be present (implicit
+        # AND), so a natural-language query like "how to use TEXT_GENERATION"
+        # would match nothing. We OR the words for the keyword leg so it matches
+        # on any of them, ranked by SCORE — normal keyword-search behavior. The
+        # vector leg always uses the raw query (it's embedded as-is).
+        keywords = " OR ".join(query.split())
+
         # We run each leg on its own only so we can show the three rankings side
         # by side. The hybrid query already fuses lexical + vector with RRF in SQL.
-        lexical = ids(conn, LEXICAL_SQL, query, 2)
-        vector  = ids(conn, VECTOR_SQL,  query, 1)
-        hybrid  = ids(conn, HYBRID_SQL,  query, 3)
+        lexical = ids(conn, LEXICAL_SQL, [keywords, keywords])
+        vector  = ids(conn, VECTOR_SQL,  [query])
+        hybrid  = ids(conn, HYBRID_SQL,  [query, keywords, keywords])
 
         print("\n" + "=" * 70)
         print(f'QUERY: "{query}"')
