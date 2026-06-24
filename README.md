@@ -140,12 +140,17 @@ in-database embeddings.
 > Lexical-only (no watsonx): set `SKIP_EMBEDDING=1` in `.env` to stop after the
 > text index.
 
-### 6. `6_search.py` — hybrid retrieval
+### 6. `search.sh` — hybrid retrieval
 
 ```bash
-python scripts/6_search.py                  # preset demo queries
-python scripts/6_search.py "how do I turn text into vectors"   # your own query
+./scripts/search.sh                                       # preset demo queries
+./scripts/search.sh "how do I turn text into vectors"     # your own query
 ```
+
+`search.sh` runs the search over a **fast local Db2 connection** (as the instance
+owner) — handy when the `ibm_db` TCP connect is slow. It's a thin wrapper around
+`6_search.py`, which you can also run directly if your `.env` points at a Db2 you
+reach over TCP: `python scripts/6_search.py "..."`.
 
 For each query it runs the **lexical** leg (`CONTAINS` + `SCORE`) and the
 **vector** leg (`VECTOR_DISTANCE` over a freshly embedded query), and fuses
@@ -154,6 +159,33 @@ the three rankings side by side, so you can see lexical nail exact terms, vector
 catch paraphrases, and the fusion get both. With no argument it runs a couple of
 preset queries; with an argument it searches that query.
 **Leaves behind:** nothing — it's read-only.
+
+## Example queries to try
+
+These are written for the IBM Db2 12.1 LLM-integration reference PDF this project
+was built around — adapt them to your own document. The principle is general:
+**exact terms favor keyword search, paraphrases favor vectors, and a mix favors
+hybrid.** Run any of them with:
+
+```bash
+./scripts/search.sh "what privilege do I need to call TO_EMBEDDING"
+```
+
+**Keyword search wins** — an exact **SQLSTATE error code** is just digits with no
+meaning to embed, so the vector leg scatters to unrelated chunks while keyword
+search lands the exact rule that raises it:
+- `42615` → the option value-range checks (`TEMPERATURE`, `FREQUENCY_PENALTY`, …) that raise this code
+- `42613` → the `ALTER EXTERNAL MODEL` rule about setting and dropping a parameter in one statement
+
+**Vector search wins** — plain-language questions whose words don't appear in the
+answer; the keyword leg misses but the embedding finds the right chunk:
+- `how can I make the model stop generating at a certain phrase` → the **STOP_SEQUENCE** option
+- `how do I turn text into vectors` → the **TEXT_EMBEDDING** model type
+
+**Hybrid wins** — a distinctive term *and* natural phrasing, where both legs
+contribute to the fused ranking:
+- `what privilege do I need to call TO_EMBEDDING` → the **USAGE** privilege
+- `how do I change the API key on an existing model` → **ALTER EXTERNAL MODEL … SET KEY**
 
 ## Configuration
 
@@ -164,7 +196,7 @@ schema/table names, chunk token cap, and vector dimension. See
 ## Repository layout
 
 ```
-scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py
+scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py · search.sh
 docs/      Db2 and OpenSearch setup notes, images
 ```
 

@@ -163,12 +163,15 @@ def main():
         print("\n" + "=" * 70)
         print(f'QUERY: "{query}"')
         print("-" * 70)
-        print(f"  Lexical (keyword)  : {lexical or '(no keyword matches)'}")
-        print(f"  Vector  (semantic) : {vector}")
-        print(f"  Hybrid  (RRF in SQL): {hybrid}")
-        print("\n  Hybrid results:")
-        for cid in hybrid:
-            print(f"    #{cid}: {snippet(conn, cid)}")
+        # Show every leg with its top results, so you can see what keyword match,
+        # semantic match, and the fusion each surface — and where one beats the
+        # others (e.g. an exact error code: keyword nails it, vector scatters).
+        for label, result in (("Lexical (keyword)",    lexical),
+                              ("Vector  (semantic)",    vector),
+                              ("Hybrid  (RRF in SQL)",  hybrid)):
+            print(f"\n  {label}: {result or '(no matches)'}")
+            for cid in result:
+                print(f"      #{cid}: {snippet(conn, cid)}")
     ibm_db.close(conn)
 
 

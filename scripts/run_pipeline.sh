@@ -12,7 +12,7 @@
 #
 # Run from the repo root as your normal user. The two shell steps are piped to
 # db2inst1 via sudo (so db2/db2ts are available); the Python steps use the
-# project's .venv. Search (step 6) is separate: python scripts/6_search.py "...".
+# project's .venv. Search (step 6) is separate: ./scripts/search.sh "...".
 
 set -euo pipefail
 
@@ -48,4 +48,4 @@ echo "### 4/5  chunk    $MD -> $CSV"
 echo "### 5/5  ingest   $CSV -> Db2"
 "$PY" "$SCRIPTS/5_ingest.py" "$CSV"
 
-echo "### done — corpus is ready. Search it with:  python scripts/6_search.py \"your query\""
+echo "### done — corpus is ready. Search it with:  ./scripts/search.sh \"your query\""
