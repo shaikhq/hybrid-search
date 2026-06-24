@@ -152,13 +152,40 @@ owner) — handy when the `ibm_db` TCP connect is slow. It's a thin wrapper arou
 `6_search.py`, which you can also run directly if your `.env` points at a Db2 you
 reach over TCP: `python scripts/6_search.py "..."`.
 
-For each query it runs the **lexical** leg (`CONTAINS` + `SCORE`) and the
-**vector** leg (`VECTOR_DISTANCE` over a freshly embedded query), and fuses
-them with **Reciprocal Rank Fusion — computed in one Db2 SQL query**. It prints
-the three rankings side by side, so you can see lexical nail exact terms, vector
-catch paraphrases, and the fusion get both. With no argument it runs a couple of
-preset queries; with an argument it searches that query.
+For each query it runs the **lexical** leg (`CONTAINS` + BM25 `SCORE`) and the
+**vector** leg (`VECTOR_DISTANCE` over a freshly embedded query), then **fuses
+them in one Db2 SQL query**. It prints all three rankings — with each result's
+score — so you can see lexical nail exact terms, vector catch paraphrases, and
+the fusion get both. With no argument it runs a couple of preset queries; with an
+argument it searches that query.
 **Leaves behind:** nothing — it's read-only.
+
+**How the fusion works (and why not plain RRF).** Reciprocal Rank Fusion ranks
+by position only, so a leg that is essentially guessing (vectors on an exact
+error code, keywords on a pure paraphrase) injects its top guesses with the same
+weight as the other leg's real hits — and they tie, so noise floats to the top.
+Instead, the fusion (in [scripts/hybrid_core.py](scripts/hybrid_core.py)):
+1. carries each leg's real score (BM25 `SCORE`, cosine similarity),
+2. **gates** a leg out when its best score is below a threshold (a near-random
+   leg contributes nothing — e.g. vectors whose top cosine similarity `< 0.30`),
+3. **max-normalizes** the survivors to `(0,1]`, and
+4. takes a **weighted sum**.
+A document found by *both* legs is reinforced; a noisy leg is muted. The gates,
+weights, and candidate-pool size are `.env`-tunable (`HYBRID_*`).
+
+### Measuring quality — `eval.sh`
+
+```bash
+./scripts/eval.sh
+```
+
+Runs a small golden set (query → known-relevant chunks, in
+[scripts/eval.py](scripts/eval.py)) and reports **MRR, Recall@5, and Hits@1** for
+each leg and the fusion, plus a per-query table of where the first relevant
+result landed. Run it after any change to chunking, the embedding model, or the
+fusion knobs and judge the change by the numbers rather than by eyeballing one
+query. On the sample corpus the fusion beats both legs on every metric (e.g.
+hybrid MRR ≈ 0.89 vs vector 0.68 vs lexical 0.51).
 
 ## Example queries to try
 
@@ -190,13 +217,17 @@ contribute to the fused ranking:
 ## Configuration
 
 Everything is configured via `.env`: Db2 connection, watsonx.ai credentials,
-schema/table names, chunk token cap, and vector dimension. See
+schema/table names, chunk token cap, and vector dimension. The fusion knobs
+(`HYBRID_W_LEX`, `HYBRID_W_VEC`, `HYBRID_VEC_GATE`, `HYBRID_LEX_GATE`,
+`HYBRID_POOL`) are optional — tune them against `./scripts/eval.sh`. See
 [.env.example](.env.example).
 
 ## Repository layout
 
 ```
-scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py · search.sh
+scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py
+           search.sh (fast local search) · eval.sh (quality metrics)
+           hybrid_core.py (search engine + fusion) · eval.py (golden set)
 docs/      Db2 and OpenSearch setup notes, images
 ```
 
@@ -204,6 +235,7 @@ docs/      Db2 and OpenSearch setup notes, images
 
 - [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.
 - [docs/opensearch-setup.md](docs/opensearch-setup.md) — install OpenSearch and wire it to Db2 Text Search.
+- [docs/eval-results.md](docs/eval-results.md) — search-quality evaluation results from `./scripts/eval.sh`.
 
 ## License
 
