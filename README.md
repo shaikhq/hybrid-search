@@ -187,6 +187,27 @@ fusion knobs and judge the change by the numbers rather than by eyeballing one
 query. On the sample corpus the fusion beats both legs on every metric (e.g.
 hybrid MRR ≈ 0.89 vs vector 0.68 vs lexical 0.51).
 
+## Demo UI
+
+A minimalist web demo that shows, in a few clicks, how each single retriever has a
+blind spot and hybrid covers both — side by side, with the gold answer's rank
+highlighted.
+
+```bash
+# 1. Freeze results for the curated queries (runs the real search once)
+./ui/build_fixtures.sh
+
+# 2. Start the demo (offline — no Db2/watsonx needed at talk time)
+./ui/run.sh                 # → http://127.0.0.1:8000
+
+# Optional: ad-hoc typed queries against the live engine
+./ui/run.sh --live          # FastAPI backend; Swagger at /docs
+```
+
+The default run serves a static page + frozen `fixtures.json` with Python's
+stdlib server, so the talk runs fully offline. See [ui/README.md](ui/README.md)
+for the layout, the acceptance walk-through, and color/design notes.
+
 ## Example queries to try
 
 These are written for the IBM Db2 12.1.5 LLM-integration reference PDF this project
@@ -228,6 +249,7 @@ schema/table names, chunk token cap, and vector dimension. The fusion knobs
 scripts/   1_cleanup.sh · 2_setup.sh · 3_extract.py · 4_chunk.py · 5_ingest.py · 6_search.py
            search.sh (fast local search) · eval.sh (quality metrics)
            hybrid_core.py (search engine + fusion) · eval.py (golden set)
+ui/        run.sh · build_fixtures.sh · api.py · queries.json · static/ (the demo)
 docs/      Db2 and OpenSearch setup notes, images
 ```
 
@@ -236,6 +258,7 @@ docs/      Db2 and OpenSearch setup notes, images
 - [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.5.
 - [docs/opensearch-setup.md](docs/opensearch-setup.md) — install OpenSearch and wire it to Db2 Text Search.
 - [docs/eval-results.md](docs/eval-results.md) — search-quality evaluation results from `./scripts/eval.sh`.
+- [ui/README.md](ui/README.md) — the demo UI: one-command run, acceptance walk-through, design notes.
 
 ## License
 

@@ -11,10 +11,12 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$HERE")"
 OWNER="${DB2_INSTANCE_OWNER:-db2inst1}"
 
-# Stage copies the instance owner can read (eval.py imports hybrid_core.py).
-cp "$HERE/eval.py" "$HERE/hybrid_core.py" /tmp/
-chmod 644 /tmp/eval.py /tmp/hybrid_core.py
+# Stage copies the instance owner can read (eval.py imports hybrid_core.py and
+# loads the shared ui/queries.json).
+cp "$HERE/eval.py" "$HERE/hybrid_core.py" "$REPO/ui/queries.json" /tmp/
+chmod 644 /tmp/eval.py /tmp/hybrid_core.py /tmp/queries.json
 
 sudo -iu "$OWNER" bash -lc 'DB2_HOST=local python3 /tmp/eval.py'

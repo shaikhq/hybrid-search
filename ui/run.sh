@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# run.sh — start the demo with ONE command.
+#
+#   ./ui/run.sh           OFFLINE (default): serves the static UI + frozen
+#                         fixtures.json with python's stdlib server. No Db2, no
+#                         pip deps — this is the conference/talk path.
+#
+#   ./ui/run.sh --live    LIVE: FastAPI backend answers typed queries against the
+#                         real engine (runs as the Db2 instance owner, local
+#                         connection). For Q&A / ad-hoc queries.
+#
+# Build/refresh the fixtures first with:  ./ui/build_fixtures.sh
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(dirname "$HERE")"
+OWNER="${DB2_INSTANCE_OWNER:-db2inst1}"
+PORT="${PORT:-8000}"
+
+if [ "${1:-}" = "--live" ]; then
+    # Stage everything the instance owner can read (it can't read /home/<you>).
+    STAGE=/tmp/hybrid-ui
+    rm -rf "$STAGE"; mkdir -p "$STAGE"
+    cp "$HERE/api.py" "$HERE/build_fixtures.py" "$HERE/queries.json" \
+       "$REPO/scripts/hybrid_core.py" "$STAGE/"
+    cp -r "$HERE/static" "$STAGE/static"
+    chmod -R a+rX "$STAGE"
+    echo "LIVE  → http://127.0.0.1:$PORT   (real Db2 search as $OWNER; docs at /docs)"
+    sudo -iu "$OWNER" bash -lc \
+        "cd '$STAGE' && DB2_HOST=local python3 -m uvicorn api:app --host 127.0.0.1 --port $PORT"
+else
+    [ -f "$HERE/static/fixtures.json" ] || {
+        echo "No fixtures yet — run ./ui/build_fixtures.sh first." >&2; exit 1; }
+    echo "OFFLINE → http://127.0.0.1:$PORT   (frozen fixtures, no Db2 needed)"
+    cd "$HERE/static" && exec python3 -m http.server "$PORT" --bind 127.0.0.1
+fi

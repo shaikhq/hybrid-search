@@ -12,7 +12,7 @@ confidence, so a leg that is essentially guessing (vectors on an exact error
 code, BM25 on a pure paraphrase) injects its top guesses with the same weight as
 the other leg's real hits — and they tie. Instead we:
   1. carry each leg's real score (BM25 SCORE, cosine similarity),
-  2. min-max normalize it within the query's candidate pool,
+  2. max-normalize it (s / max) within the query's candidate pool,
   3. GATE a leg out when its best score is below a threshold (a near-random leg
      contributes nothing), and
   4. take a weighted sum of the surviving normalized scores.
@@ -143,6 +143,59 @@ def hybrid(conn, query, limit=10):
     """
     kw = keywords(query)
     return _rows(conn, sql, [query, kw, kw])
+
+
+def hybrid_explain(conn, query, limit=10):
+    """Like hybrid(), but also returns each leg's normalized contribution so the
+    UI can show *why* a result ranked where it did. Same fusion SQL as hybrid()
+    — no behavior change — just additional columns.
+
+    Returns [{chunk_id, lex_norm, vec_norm, fused}], best first. lex_norm/vec_norm
+    are the max-normalized leg scores (0 if the leg was gated out or absent);
+    fused = W_LEX*lex_norm + W_VEC*vec_norm (the value hybrid() orders by)."""
+    sql = f"""
+        WITH
+        q (qv) AS (VALUES TO_EMBEDDING(CAST(? AS VARCHAR(4000)) USING {MODEL})),
+        lex0 AS (
+            SELECT chunk_id, SCORE(chunk_text, CAST(? AS VARCHAR(4000))) AS s
+            FROM {T} WHERE CONTAINS(chunk_text, CAST(? AS VARCHAR(4000))) = 1
+            ORDER BY s DESC FETCH FIRST {POOL} ROWS ONLY),
+        vec0 AS (
+            SELECT c.chunk_id, (1 - VECTOR_DISTANCE(c.embedding, q.qv, COSINE)) AS s
+            FROM {T} c, q
+            ORDER BY s DESC FETCH FIRST {POOL} ROWS ONLY),
+        lex AS (SELECT chunk_id, {_normalized(LEX_GATE)} AS n FROM lex0),
+        vec AS (SELECT chunk_id, {_normalized(VEC_GATE)} AS n FROM vec0)
+        SELECT COALESCE(lex.chunk_id, vec.chunk_id) AS chunk_id,
+               COALESCE(lex.n, 0) AS lex_norm,
+               COALESCE(vec.n, 0) AS vec_norm,
+               {W_LEX} * COALESCE(lex.n, 0) + {W_VEC} * COALESCE(vec.n, 0) AS fused
+        FROM lex FULL OUTER JOIN vec ON lex.chunk_id = vec.chunk_id
+        ORDER BY fused DESC, chunk_id ASC
+        FETCH FIRST {int(limit)} ROWS ONLY
+    """
+    kw = keywords(query)
+    stmt = ibm_db.prepare(conn, sql)
+    for i, value in enumerate([query, kw, kw], start=1):
+        ibm_db.bind_param(stmt, i, value)
+    ibm_db.execute(stmt)
+    out, row = [], ibm_db.fetch_tuple(stmt)
+    while row:
+        out.append({"chunk_id": int(row[0]), "lex_norm": float(row[1]),
+                    "vec_norm": float(row[2]), "fused": float(row[3])})
+        row = ibm_db.fetch_tuple(stmt)
+    return out
+
+
+def gates(conn, query):
+    """Which legs are gated out for this query (best score below threshold).
+    Returns {'vector_gated': bool, 'lexical_gated': bool}."""
+    lex = lexical(conn, query, 1)
+    vec = vector(conn, query, 1)
+    return {
+        "lexical_gated": (not lex) or lex[0][1] < LEX_GATE,
+        "vector_gated":  (not vec) or vec[0][1] < VEC_GATE,
+    }
 
 
 def snippet(conn, chunk_id, width=90):

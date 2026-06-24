@@ -11,38 +11,33 @@ weights, and judge the change by the numbers instead of by eyeballing one query.
 
     ./scripts/eval.sh        # runs as the Db2 instance owner, local connection
 
-The labels below are for the IBM Db2 12.1.5 LLM-integration reference doc; replace
-them for your own corpus.
+The labels are loaded from the shared ui/queries.json so the eval and the demo
+UI use the SAME curated set. They're for the IBM Db2 12.1.5 LLM-integration
+reference doc; replace queries.json for your own corpus.
 """
+
+import json
+import os
 
 import ibm_db
 import hybrid_core as h
 
 K = 5  # recall / top-k cutoff
 
-# Golden eval set / relevance judgments (qrels): (query, {relevant chunk_id, ...}).
-# A starting, hand-labeled set — extend it as you find more representative queries.
-GOLDEN = [
-    # exact codes / identifiers -> keyword should win
-    ("42615", {27, 33, 36}),
-    ("42613", {45}),
-    ("42601", {45}),
-    ("38555", {90}),
-    ("REASONING_EFFORT", {34}),
-    ("REPETITION_PENALTY", {22}),
-    # distinctive term + natural language -> hybrid
-    ("what privilege is needed to use TO_EMBEDDING", {55, 82}),
-    ("how do I change the API key on an existing model", {30, 46}),
-    ("how do I transfer ownership of a model to another user", {51, 52}),
-    ("how do I register an external model", {4}),
-    ("how do I drop an external model", {47}),
-    # paraphrases whose words aren't in the answer -> vector
-    ("how can I make the model stop generating at a certain phrase", {23, 35}),
-    ("how do I turn text into vectors", {14, 80}),
-    ("what controls the randomness of the output", {24}),
-    ("limit the maximum length of the generated text", {19}),
-    ("how long can text generation run before timing out", {25}),
-]
+# Golden eval set / relevance judgments (qrels): loaded from the shared
+# ui/queries.json so the eval and the demo UI stay in sync. Each entry yields
+# (query, {relevant chunk_id, ...}).
+def _load_golden():
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "queries.json"),                 # staged alongside (eval.sh)
+                 os.path.join(here, "..", "ui", "queries.json")):    # repo layout
+        if os.path.exists(path):
+            with open(path) as f:
+                return [(item["query"], set(item["gold_chunk_ids"])) for item in json.load(f)]
+    raise FileNotFoundError("queries.json not found (looked in script dir and ../ui/)")
+
+
+GOLDEN = _load_golden()
 
 
 def first_relevant_rank(ranked, relevant):
