@@ -1,6 +1,6 @@
-# Installing and Setting Up IBM Db2 12.1
+# Installing and Setting Up IBM Db2 12.1.5
 
-A minimal, beginner-friendly guide to installing Db2 12.1 on Linux, creating an
+A minimal, beginner-friendly guide to installing Db2 12.1.5 on Linux, creating an
 instance, and verifying it works with a sample database and a test query.
 
 ## Setup workflow at a glance
@@ -62,7 +62,7 @@ $ sudo /opt/ibm/db2/V12.1/instance/db2icrt -s ese -a SERVER -p 50000 -u db2inst1
 $ sudo su - db2inst1                    # the prompt changes to db2inst1$
 db2inst1$ db2set DB2COMM=TCPIP          # allow TCP/IP connections
 db2inst1$ db2start
-db2inst1$ db2level                      # success looks like: DB2 v12.1.x.x
+db2inst1$ db2level                      # success looks like: DB2 v12.1.5.x
 ```
 
 ## 2. Create a sample database and run a test query

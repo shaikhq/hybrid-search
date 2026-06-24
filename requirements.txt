@@ -1,5 +1,5 @@
 # Dependencies for the ingestion + search pipeline (scripts/ingest.py, scripts/search.py).
-# Target: IBM Db2 12.1, Python 3.12, CPU-only.
+# Target: IBM Db2 12.1.5, Python 3.12, CPU-only.
 #
 # Install CPU-only torch/torchvision FIRST so pip doesn't pull large CUDA wheels:
 #

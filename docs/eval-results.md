@@ -5,7 +5,7 @@ Search-quality results produced by the evaluation harness.
 - **Reproduce:** `./scripts/eval.sh`
 - **Golden eval set** (relevance judgments / *qrels*): [scripts/eval.py](../scripts/eval.py)
   — 16 queries, each paired with its known-relevant chunk(s)
-- **Corpus:** IBM Db2 12.1 LLM-integration reference (101 chunks)
+- **Corpus:** IBM Db2 12.1.5 LLM-integration reference (101 chunks)
 - **Date:** 2026-06-23
 - **Verdict:** ✅ PASS
 

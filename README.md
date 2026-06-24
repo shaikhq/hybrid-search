@@ -1,4 +1,4 @@
-# Hybrid Search on IBM Db2 12.1
+# Hybrid Search on IBM Db2 12.1.5
 
 Build a **hybrid search** corpus inside Db2 — keyword search *and* semantic
 (vector) search over the same data — straight from a PDF.
@@ -13,7 +13,7 @@ when you combine **two** ways of finding text:
 
 This project ingests a PDF and stores each chunk in Db2 with **both**
 representations, then searches with both and fuses the results. It uses
-Db2 12.1's built-in features end to end:
+Db2 12.1.5's built-in features end to end:
 
 - **Db2 Text Search** (OpenSearch-backed) for the lexical/BM25 index, and
 - **native `VECTOR` columns + in-database `TO_EMBEDDING`** (via a registered
@@ -43,7 +43,7 @@ other's blind spot.
 
 ## Prerequisites
 
-- **IBM Db2 12.1** with the native `VECTOR` type and in-database embedding
+- **IBM Db2 12.1.5** with the native `VECTOR` type and in-database embedding
   (model registration + `TO_EMBEDDING`). See [docs/db2-setup.md](docs/db2-setup.md).
 - **OpenSearch**, installed and registered with Db2 Text Search.
   See [docs/opensearch-setup.md](docs/opensearch-setup.md).
@@ -189,7 +189,7 @@ hybrid MRR ≈ 0.89 vs vector 0.68 vs lexical 0.51).
 
 ## Example queries to try
 
-These are written for the IBM Db2 12.1 LLM-integration reference PDF this project
+These are written for the IBM Db2 12.1.5 LLM-integration reference PDF this project
 was built around — adapt them to your own document. The principle is general:
 **exact terms favor keyword search, paraphrases favor vectors, and a mix favors
 hybrid.** Run any of them with:
@@ -233,7 +233,7 @@ docs/      Db2 and OpenSearch setup notes, images
 
 ## Docs
 
-- [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.
+- [docs/db2-setup.md](docs/db2-setup.md) — install and prepare Db2 12.1.5.
 - [docs/opensearch-setup.md](docs/opensearch-setup.md) — install OpenSearch and wire it to Db2 Text Search.
 - [docs/eval-results.md](docs/eval-results.md) — search-quality evaluation results from `./scripts/eval.sh`.
 

@@ -11,7 +11,7 @@ weights, and judge the change by the numbers instead of by eyeballing one query.
 
     ./scripts/eval.sh        # runs as the Db2 instance owner, local connection
 
-The labels below are for the IBM Db2 12.1 LLM-integration reference doc; replace
+The labels below are for the IBM Db2 12.1.5 LLM-integration reference doc; replace
 them for your own corpus.
 """
 
