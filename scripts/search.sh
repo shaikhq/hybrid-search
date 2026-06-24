@@ -15,9 +15,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OWNER="${DB2_INSTANCE_OWNER:-db2inst1}"
 
-# The instance owner can't read files under /home/<you>, so stage a copy it can.
-cp "$HERE/6_search.py" /tmp/6_search.py
-chmod 644 /tmp/6_search.py
+# The instance owner can't read files under /home/<you>, so stage copies it can
+# (6_search.py imports hybrid_core.py, so both must be alongside in /tmp).
+cp "$HERE/6_search.py" "$HERE/hybrid_core.py" /tmp/
+chmod 644 /tmp/6_search.py /tmp/hybrid_core.py
 
 # Run as the instance owner with a LOCAL connection (DB2_HOST=local).
 # Build the command with the query safely shell-quoted (%q), because passing
