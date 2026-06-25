@@ -19,8 +19,8 @@ const legChip = (leg) => leg === "bm25"
 
 /* ---------- boot ---------- */
 async function boot() {
-  DATA = await (await fetch("fixtures.json")).json();
-  DECK_ALL = await (await fetch("queries.json")).json();
+  DATA = await (await fetch("fixtures.json", { cache: "no-store" })).json();
+  DECK_ALL = await (await fetch("queries.json", { cache: "no-store" })).json();
   DECK = DECK_ALL.filter((q) => q.featured);
   renderDeck();
   renderAgg();
@@ -51,7 +51,7 @@ function renderAgg() {
   });
   const n = DECK.length;
   $("#agg").innerHTML =
-    `<span class="a-title">Gold answer in top ${k}, across ${n} demo queries</span>` +
+    `<span class="a-title">Gold answer in top ${k}, across ${n} eval queries</span>` +
     modes.map((m) => `<span class="a-item"><span class="chip ${cls[m]}">${label[m]}</span> <b>${hit[m]}/${n}</b></span>`).join("") +
     `<span class="a-note">MRR (illustrative): ${modes.map((m) => `${label[m]} ${(mrr[m] / n).toFixed(2)}`).join(" · ")}</span>`;
 }

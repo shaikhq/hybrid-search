@@ -23,13 +23,13 @@
   { "id": 11, "query": "how long can text generation run before timing out", "query_type": "semantic", "gold_chunk_ids": [25],
     "note": "Paraphrase of TIME_LIMIT." },
 
-  { "id": 12, "query": "what privilege is needed to use TO_EMBEDDING", "query_type": "mixed", "featured": true, "gold_chunk_ids": [55, 82],
+  { "id": 12, "query": "what privilege is needed to use TO_EMBEDDING", "query_type": "mixed", "gold_chunk_ids": [55, 82],
     "note": "Distinctive term (TO_EMBEDDING) plus a natural-language question; both legs help." },
   { "id": 13, "query": "how do I change the API key on an existing model", "query_type": "mixed", "featured": true, "gold_chunk_ids": [30, 46],
     "note": "Both legs agree (ALTER EXTERNAL MODEL ... SET KEY)." },
   { "id": 14, "query": "how do I transfer ownership of a model to another user", "query_type": "mixed", "gold_chunk_ids": [51, 52],
     "note": "Both legs agree (TRANSFER OWNERSHIP)." },
-  { "id": 15, "query": "how do I register an external model", "query_type": "mixed", "gold_chunk_ids": [4],
+  { "id": 15, "query": "how do I register an external model", "query_type": "mixed", "featured": true, "gold_chunk_ids": [4],
     "note": "Fusion beats either leg alone (CREATE EXTERNAL MODEL)." },
   { "id": 16, "query": "how do I drop an external model", "query_type": "mixed", "gold_chunk_ids": [47],
     "note": "Both legs agree (DROP EXTERNAL MODEL)." }
