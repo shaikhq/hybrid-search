@@ -19,8 +19,24 @@ the other leg's real hits — and they tie. Instead we:
 A document found by *both* legs is reinforced; a noisy leg is muted.
 """
 
+import logging
 import os
 import ibm_db
+
+# SQL sent to Db2 is logged here at INFO. Callers decide where it goes: the live
+# UI (ui/api.py) routes this to the uvicorn console; the CLI/eval leave it
+# unconfigured, so nothing is printed unless you opt in.
+log = logging.getLogger("hybrid_core")
+
+
+def _log_sql(sql, params=(), level=logging.INFO):
+    """Log one statement (whitespace collapsed to a single line) plus its bound
+    parameter values, so the log shows exactly what Db2 receives."""
+    flat = " ".join(sql.split())
+    if params:
+        log.log(level, "Db2 SQL: %s -- params=%r", flat, list(params))
+    else:
+        log.log(level, "Db2 SQL: %s", flat)
 
 # --- settings (.env best-effort; defaults work for local mode) ---------------
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -75,6 +91,7 @@ def connect():
 
 
 def _rows(conn, sql, params):
+    _log_sql(sql, params)
     stmt = ibm_db.prepare(conn, sql)
     for i, value in enumerate(params, start=1):
         ibm_db.bind_param(stmt, i, value)
@@ -98,12 +115,19 @@ def lexical(conn, query, limit=POOL):
 
 
 def vector(conn, query, limit=POOL):
-    """Vector leg → [(chunk_id, cosine_similarity)], best first."""
+    """Vector leg → [(chunk_id, cosine_similarity)], best first.
+
+    Ordering by the raw COSINE distance and fetching with APPROX lets Db2 serve
+    this from the vector (ANN) index — a graph traversal instead of a full scan.
+    The optimizer matches the index only when ORDER BY is on VECTOR_DISTANCE with
+    the index's metric (COSINE); we still return 1 - distance as the similarity
+    the fusion expects (lowest distance first == highest similarity first)."""
     sql = f"""
         WITH q (qv) AS (VALUES TO_EMBEDDING(CAST(? AS VARCHAR(4000)) USING {MODEL}))
         SELECT c.chunk_id, (1 - VECTOR_DISTANCE(c.embedding, q.qv, COSINE)) AS sim
         FROM {T} c, q
-        ORDER BY sim DESC FETCH FIRST {int(limit)} ROWS ONLY
+        ORDER BY VECTOR_DISTANCE(c.embedding, q.qv, COSINE)
+        FETCH APPROX FIRST {int(limit)} ROWS ONLY
     """
     return _rows(conn, sql, [query])
 
@@ -132,7 +156,8 @@ def hybrid(conn, query, limit=10):
         vec0 AS (
             SELECT c.chunk_id, (1 - VECTOR_DISTANCE(c.embedding, q.qv, COSINE)) AS s
             FROM {T} c, q
-            ORDER BY s DESC FETCH FIRST {POOL} ROWS ONLY),
+            ORDER BY VECTOR_DISTANCE(c.embedding, q.qv, COSINE)
+            FETCH APPROX FIRST {POOL} ROWS ONLY),
         lex AS (SELECT chunk_id, {_normalized(LEX_GATE)} AS n FROM lex0),
         vec AS (SELECT chunk_id, {_normalized(VEC_GATE)} AS n FROM vec0)
         SELECT COALESCE(lex.chunk_id, vec.chunk_id) AS chunk_id,
@@ -163,7 +188,8 @@ def hybrid_explain(conn, query, limit=10):
         vec0 AS (
             SELECT c.chunk_id, (1 - VECTOR_DISTANCE(c.embedding, q.qv, COSINE)) AS s
             FROM {T} c, q
-            ORDER BY s DESC FETCH FIRST {POOL} ROWS ONLY),
+            ORDER BY VECTOR_DISTANCE(c.embedding, q.qv, COSINE)
+            FETCH APPROX FIRST {POOL} ROWS ONLY),
         lex AS (SELECT chunk_id, {_normalized(LEX_GATE)} AS n FROM lex0),
         vec AS (SELECT chunk_id, {_normalized(VEC_GATE)} AS n FROM vec0)
         SELECT COALESCE(lex.chunk_id, vec.chunk_id) AS chunk_id,
@@ -175,6 +201,7 @@ def hybrid_explain(conn, query, limit=10):
         FETCH FIRST {int(limit)} ROWS ONLY
     """
     kw = keywords(query)
+    _log_sql(sql, [query, kw, kw])
     stmt = ibm_db.prepare(conn, sql)
     for i, value in enumerate([query, kw, kw], start=1):
         ibm_db.bind_param(stmt, i, value)
@@ -200,6 +227,7 @@ def gates(conn, query):
 
 def snippet(conn, chunk_id, width=90):
     sql = f"SELECT CAST(SUBSTR(chunk_text,1,{int(width)}) AS VARCHAR({int(width)})) AS s FROM {T} WHERE chunk_id = ?"
+    _log_sql(sql, [chunk_id], level=logging.DEBUG)
     stmt = ibm_db.prepare(conn, sql)
     ibm_db.bind_param(stmt, 1, chunk_id)
     ibm_db.execute(stmt)

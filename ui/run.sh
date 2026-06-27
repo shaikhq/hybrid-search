@@ -26,12 +26,26 @@ if [ "${1:-}" = "--live" ]; then
        "$REPO/scripts/hybrid_core.py" "$STAGE/"
     cp -r "$HERE/static" "$STAGE/static"
     chmod -R a+rX "$STAGE"
+    # A previous server orphaned by a closed terminal keeps holding the port and
+    # would block the bind ("address already in use"). It runs as $OWNER, so free
+    # the port as $OWNER before starting.
+    if sudo -iu "$OWNER" bash -lc "fuser ${PORT}/tcp" >/dev/null 2>&1; then
+        echo "Port ${PORT} busy — stopping the previous live server first."
+        sudo -iu "$OWNER" bash -lc "fuser -k ${PORT}/tcp" >/dev/null 2>&1 || true
+        sleep 1
+    fi
     echo "LIVE  → http://127.0.0.1:$PORT   (real Db2 search as $OWNER; docs at /docs)"
     sudo -iu "$OWNER" bash -lc \
         "cd '$STAGE' && DB2_HOST=local python3 -m uvicorn api:app --host 127.0.0.1 --port $PORT"
 else
     [ -f "$HERE/static/fixtures.json" ] || {
         echo "No fixtures yet — run ./ui/build_fixtures.sh first." >&2; exit 1; }
+    # Free the port if a previous offline server (this user) is still holding it.
+    if fuser "${PORT}/tcp" >/dev/null 2>&1; then
+        echo "Port ${PORT} busy — stopping the previous server first."
+        fuser -k "${PORT}/tcp" >/dev/null 2>&1 || true
+        sleep 1
+    fi
     echo "OFFLINE → http://127.0.0.1:$PORT   (frozen fixtures, no Db2 needed)"
     cd "$HERE/static" && exec python3 -m http.server "$PORT" --bind 127.0.0.1
 fi

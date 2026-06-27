@@ -19,7 +19,12 @@
     </div>
   </header>
 
-  <main class="layout">
+  <nav class="tabs" id="tabs" role="tablist" aria-label="pages">
+    <button class="tab" data-page="search" role="tab" aria-selected="true">Search</button>
+    <button class="tab" data-page="eval" role="tab" aria-selected="false">Golden eval set</button>
+  </nav>
+
+  <main class="layout" id="page-search">
     <!-- LEFT: the demo deck -->
     <aside class="deck" aria-label="curated queries">
       <h2>Eval queries</h2>
@@ -53,6 +58,19 @@
       </div>
     </section>
   </main>
+
+  <!-- SECOND PAGE: the golden eval set, explained for newcomers -->
+  <section class="evalpage" id="page-eval" hidden>
+    <div class="eval-intro">
+      <h2>Golden eval set</h2>
+      <p>These are the test questions behind the demo. For each question, the
+        <b>gold passage</b> is the exact chunk of the Db2 docs we expect search to
+        return. We grade each strategy (Lexical, Vector, Hybrid) by how close to the
+        top it surfaces these gold passages — that's where the hit-rate and MRR
+        numbers come from.</p>
+    </div>
+    <div id="eval-list" class="eval-list"></div>
+  </section>
 
   <script src="app.js"></script>
 </body>

@@ -11,6 +11,14 @@
 
 set -uo pipefail
 
+# These commands need the Db2 environment. Fail loudly if db2 isn't on PATH
+# (e.g. run as your login user) instead of silently dropping nothing.
+command -v db2 >/dev/null 2>&1 || {
+  echo "db2 not found — run this as the Db2 instance owner, e.g.:" >&2
+  echo "  sudo -iu ${DB2_INSTANCE_OWNER:-db2inst1} bash -ls < scripts/1_cleanup.sh" >&2
+  exit 1
+}
+
 DB="${DB2_DATABASE:-sample}"
 SCHEMA="${DB2_SCHEMA:-myschema}"
 TABLE="${DB2_TABLE:-chunks}"

@@ -7,6 +7,8 @@ const state = { qid: null, mode: "lexical", showScores: false, record: null, que
 let DATA = null;       // fixtures.json (by_query results + meta)
 let DECK = [];         // featured queries shown in the rail
 let DECK_ALL = [];     // full curated set (so typed queries still resolve)
+let LIVE = false;      // true under ./ui/run.sh --live: every search hits Db2
+let EVAL = null;       // eval_set.json (featured queries + their gold passages)
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
@@ -22,8 +24,16 @@ async function boot() {
   DATA = await (await fetch("fixtures.json", { cache: "no-store" })).json();
   DECK_ALL = await (await fetch("queries.json", { cache: "no-store" })).json();
   DECK = DECK_ALL.filter((q) => q.featured);
+  // The live backend (ui/api.py) serves /api/queries; the offline static server
+  // doesn't. Probe once so live mode runs every search against Db2, while the
+  // offline talk path keeps using the frozen fixtures.
+  try { LIVE = (await fetch("/api/queries", { cache: "no-store" })).ok; }
+  catch (_) { LIVE = false; }
+  try { EVAL = await (await fetch("eval_set.json", { cache: "no-store" })).json(); }
+  catch (_) { EVAL = null; }
   renderDeck();
   renderAgg();
+  renderEval();
   setMode("lexical");
   wire();
 }
@@ -56,8 +66,60 @@ function renderAgg() {
     `<span class="a-note">MRR (illustrative): ${modes.map((m) => `${label[m]} ${(mrr[m] / n).toFixed(2)}`).join(" · ")}</span>`;
 }
 
+/* ---------- golden eval set page ---------- */
+function renderEval() {
+  const host = $("#eval-list");
+  if (!host) return;
+  if (!EVAL || !EVAL.queries || !EVAL.queries.length) {
+    host.innerHTML = `<p class="placeholder">No eval set found —
+      run <code>./ui/build_eval_set.sh</code> to generate it.</p>`;
+    return;
+  }
+  host.innerHTML = EVAL.queries.map((q, i) => {
+    const type = TYPE_LABEL[q.query_type] || q.query_type;
+    const n = q.gold.length;
+    const passages = q.gold.map((g) => {
+      const preview = String(g.text).replace(/\s+/g, " ").trim();
+      return `
+      <div class="gold-passage" title="Click to expand">
+        <span class="cid">#${g.chunk_id}</span>
+        <div class="gp-body">
+          <span class="snip">${esc(preview)}</span>
+          <div class="full">${esc(g.text)}</div>
+        </div>
+        <span class="gp-caret" aria-hidden="true">▸</span>
+      </div>`;
+    }).join("");
+    return `<article class="eval-card">
+      <div class="eval-q">
+        <span class="qnum">${i + 1}</span>
+        <span class="qtext">${esc(q.query)}</span>
+        <span class="type type-${q.query_type}">${type}</span>
+      </div>
+      ${q.note ? `<p class="eval-why">${esc(q.note)}</p>` : ""}
+      <div class="eval-gold-head">Gold answer${n > 1 ? "s" : ""}
+        <span>· the passage${n > 1 ? "s" : ""} search should find</span></div>
+      ${passages}
+    </article>`;
+  }).join("");
+}
+
+function setPage(page) {
+  document.querySelectorAll("#tabs .tab").forEach((t) =>
+    t.setAttribute("aria-selected", String(t.dataset.page === page)));
+  $("#page-search").hidden = page !== "search";
+  $("#page-eval").hidden = page !== "eval";
+}
+
 /* ---------- controls ---------- */
 function wire() {
+  $("#tabs").addEventListener("click", (e) => {
+    const t = e.target.closest(".tab"); if (!t) return;
+    setPage(t.dataset.page);
+  });
+  $("#eval-list").addEventListener("click", (e) => {
+    const gp = e.target.closest(".gold-passage"); if (gp) gp.classList.toggle("open");
+  });
   $("#deck-list").addEventListener("click", (e) => {
     const li = e.target.closest(".qrow"); if (!li) return;
     const item = DECK_ALL.find((q) => String(q.id) === li.dataset.id);
@@ -92,14 +154,19 @@ function setMode(mode) {
 async function run() {
   const text = $("#searchbox").value.trim();
   if (!text) return;
-  const item = DECK_ALL.find((q) => q.query === text);
-  let record = item ? DATA.by_query[item.id] : null;
+  let record = null;
 
-  if (!record) {                       // not in fixtures → try live (--live only)
+  // Live mode: always query Db2 (so every search shows up in the app log).
+  if (LIVE) {
     try {
       const r = await fetch("/api/search?q=" + encodeURIComponent(text));
       if (r.ok) record = await r.json();
-    } catch (_) { /* offline */ }
+    } catch (_) { /* fall back to fixtures below */ }
+  }
+  // Offline (or a live miss): use the frozen fixtures for curated queries.
+  if (!record) {
+    const item = DECK_ALL.find((q) => q.query === text);
+    record = item ? DATA.by_query[item.id] : null;
   }
   if (!record) {
     $("#output").innerHTML = `<p class="placeholder">This query isn't in the frozen demo set.

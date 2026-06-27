@@ -12,6 +12,7 @@ offline. This file exists for ad-hoc/typed queries during Q&A.
 """
 
 import json
+import logging
 import os
 
 from fastapi import FastAPI, Query
@@ -20,6 +21,19 @@ import ibm_db
 
 import hybrid_core as h
 import build_fixtures as bf   # responses_for()
+
+# Surface the SQL that hybrid_core sends to Db2 in the uvicorn console (INFO).
+# Reuse uvicorn's own handler/formatting (it lives on the "uvicorn" logger) so
+# each search's queries appear inline with the access log; fall back to a basic
+# handler if run without uvicorn.
+_uvicorn_handlers = logging.getLogger("uvicorn").handlers
+if _uvicorn_handlers:
+    h.log.handlers = _uvicorn_handlers
+    h.log.propagate = False
+else:
+    logging.basicConfig(level=logging.INFO)
+    h.log.propagate = True
+h.log.setLevel(logging.INFO)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(HERE, "queries.json")) as f:

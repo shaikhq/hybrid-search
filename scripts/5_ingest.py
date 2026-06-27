@@ -7,9 +7,10 @@ Reads a CSV of (chunk_id, chunk_text) produced by 4_chunk.py, then:
   2. Index    the text for keyword search (Db2 Text Search, OpenSearch-backed).
   3. Register a watsonx.ai embedding model in Db2.
   4. Embed    each chunk into a VECTOR column (in-database TO_EMBEDDING).
+  5. Index    the VECTOR column for fast approximate nearest-neighbour search.
 
 End state: one row per chunk holding its text, a stable chunk_id, a text-search
-index entry, and its dense vector.
+index entry, its dense vector, and a vector (ANN) index over that vector.
 
 Usage:  python scripts/5_ingest.py chunks.csv
 Config: read from .env (Db2 connection + watsonx.ai credentials).
@@ -47,10 +48,14 @@ PASSWORD   = setting("DB2_PASSWORD")
 SCHEMA     = setting("DB2_SCHEMA", "myschema")
 TABLE      = setting("DB2_TABLE", "chunks")
 INDEX      = TABLE + "_text_idx"
+VEC_INDEX  = TABLE + "_vec_idx"
 MODEL      = SCHEMA + "." + TABLE + "_embed"
 TABLE_FULL = SCHEMA + "." + TABLE
 
 DIM        = int(setting("VECTOR_DIM", "384"))
+# Distance metric the vector index is built with. Must match the metric used in
+# the search queries (hybrid_core.py uses COSINE). COSINE requires FLOAT32.
+VEC_DISTANCE = setting("VECTOR_DISTANCE", "COSINE")
 OS_PORT    = int(setting("OPENSEARCH_PORT", "9200"))
 OWNER      = setting("DB2_INSTANCE_OWNER", "db2inst1")
 
@@ -63,13 +68,17 @@ SKIP_EMBED = setting("SKIP_EMBEDDING", "").lower() in ("1", "true", "yes")
 csv.field_size_limit(10_000_000)   # chunk_text can be a few thousand characters
 
 
-def db2ts(command):
-    """Run one db2ts text-search command as the Db2 instance owner.
-    (Runs directly if you are the owner, otherwise via sudo.)"""
-    shell = f'export DB2DBDFT={DATABASE}; db2ts "{command}"'
+def as_owner(shell):
+    """Run a shell command as the Db2 instance owner — directly if we already are
+    that user, otherwise via sudo."""
     argv = ["bash", "-lc", shell] if getpass.getuser() == OWNER \
         else ["sudo", "-niu", OWNER, "bash", "-lc", shell]
     subprocess.run(argv, check=False)
+
+
+def db2ts(command):
+    """Run one db2ts text-search command as the Db2 instance owner."""
+    as_owner(f'export DB2DBDFT={DATABASE}; db2ts "{command}"')
 
 
 def quote(value):
@@ -105,6 +114,13 @@ def main():
         chunks = [(int(r["chunk_id"]), r["chunk_text"]) for r in csv.DictReader(f)]
     print(f"Read {len(chunks)} chunks from {csv_path}")
 
+    # Vector indexes are gated behind a registry variable. Set it (effective
+    # immediately, no instance restart) before connecting, so this session can
+    # CREATE the vector index in step 5. Skipped in lexical-only runs.
+    if not SKIP_EMBED:
+        print("Enabling vector indexing (db2set DB2_VECTOR_INDEXING=YES)")
+        as_owner("db2set DB2_VECTOR_INDEXING=YES -immediate")
+
     conn = connect()
 
     # 1. Create the table and load the chunks (parameterized insert).
@@ -122,6 +138,7 @@ def main():
 
     # 2. Build the keyword (text-search) index via db2ts.
     print(f"2. Building text-search index {SCHEMA}.{INDEX}")
+    # Change, read it from view SYSIBMTS.TSSERVERS
     found = ibm_db.exec_immediate(conn,
         f"SELECT SERVERID FROM SYSIBMTS.SYSTSSERVERS "
         f"WHERE SERVERPORT={OS_PORT} AND ENGINETYPE='OPENSEARCH' FETCH FIRST 1 ROW ONLY")
@@ -131,8 +148,11 @@ def main():
     server_id = row["SERVERID"]
     # (Text search was enabled once by 2_setup.sh.) Create the index, turn it
     # on, then fill it — db2ts prints "CIE00001 ... successfully" for each step.
-    db2ts(f"CREATE INDEX {SCHEMA}.{INDEX} FOR TEXT ON {TABLE_FULL}(chunk_text) SERVERID {server_id} INACTIVE")
-    db2ts(f"ALTER INDEX {SCHEMA}.{INDEX} FOR TEXT SET ACTIVE")
+    # Chnage to SPs
+    # Add DROP Index: https://www.ibm.com/docs/en/db2/12.1.x?topic=routines-systs-drop-procedure-drop-text-search-index
+    # Chnage to SP: https://www.ibm.com/docs/en/db2/12.1.x?topic=routines-systs-create-procedure-create-text-search-index
+    db2ts(f"CREATE INDEX {SCHEMA}.{INDEX} FOR TEXT ON {TABLE_FULL}(chunk_text) SERVERID {server_id}")
+    # Change to SP: https://www.ibm.com/docs/en/db2/12.1.x?topic=routines-systs-update-procedure-update-text-search-index
     db2ts(f"UPDATE INDEX {SCHEMA}.{INDEX} FOR TEXT")
 
     if SKIP_EMBED:
@@ -162,8 +182,27 @@ def main():
         pass  # column already exists
     ibm_db.exec_immediate(conn, f"UPDATE {TABLE_FULL} SET embedding = TO_EMBEDDING(chunk_text USING {MODEL})")
 
+    # 5. Build the vector (ANN) index over the embeddings. This accelerates the
+    #    cosine-similarity leg from a brute-force scan to a graph traversal.
+    #    Notes from the Db2 docs that drive the choices below:
+    #      - EXCLUDE NULL KEYS is required because `embedding` is nullable.
+    #      - Creating the index makes the table READ-ONLY, so it must be the
+    #        last write — all rows are already loaded and embedded by now.
+    #      - The optimizer only chooses the index once statistics exist; without
+    #        RUNSTATS an APPROX search silently falls back to a brute-force scan.
+    print(f"5. Building vector index {SCHEMA}.{VEC_INDEX} (DISTANCE {VEC_DISTANCE})")
+    try:
+        ibm_db.exec_immediate(conn, f"DROP INDEX {SCHEMA}.{VEC_INDEX}")  # tidy partial re-runs
+    except Exception:
+        pass
+    ibm_db.exec_immediate(conn,
+        f"CREATE VECTOR INDEX {SCHEMA}.{VEC_INDEX} ON {TABLE_FULL}(embedding) "
+        f"WITH DISTANCE {VEC_DISTANCE} EXCLUDE NULL KEYS")
+    ibm_db.exec_immediate(conn,
+        f"CALL SYSPROC.ADMIN_CMD('RUNSTATS ON TABLE {TABLE_FULL} AND INDEXES ALL')")
+
     ibm_db.close(conn)
-    print(f"Done: {len(chunks)} chunks with text + vector in {TABLE_FULL}")
+    print(f"Done: {len(chunks)} chunks with text + vector + vector index in {TABLE_FULL}")
 
 
 if __name__ == "__main__":
